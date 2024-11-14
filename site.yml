@@ -1,0 +1,48 @@
+---
+- name: Bootstrap Node
+  hosts: all
+  gather_facts: true
+  tasks:
+    - name: Ensure cloud-init can no longer edit the network configuration
+      ansible.builtin.copy:
+        content: |
+          network: {config: disabled}
+        mode: "0644"
+        dest: "/etc/cloud/cloud.cfg.d/99-disable-network-config.cfg"
+      become: true
+
+    - name: Ensure unattended upgrades are disabled
+      ansible.builtin.copy:
+        content: |
+          APT::Periodic::Update-Package-Lists "0";
+          APT::Periodic::Unattended-Upgrade "0";
+        dest: /etc/apt/apt.conf.d/20auto-upgrades
+        mode: "0644"
+      become: true
+
+    - name: Ensure required packages are present # noqa: package-latest
+      ansible.builtin.apt:
+        package: "{{ required_system_packages }}"
+        update_cache: true
+        state: latest
+      become: true
+
+    - name: Clone `tpm` for tmux
+      ansible.builtin.git:
+        repo: "https://github.com/tmux-plugins/tpm.git"
+        dest: "{{ ansible_facts.user_dir }}/.tmux/plugins/tpm"
+        version: "v3.1.0"
+
+    - name: Ensure dotfiles directories are present
+      ansible.builtin.file:
+        dest: "{{ item.dest | dirname }}"
+        mode: "{{ item.item.dirmode | default(omit) }}"
+        state: directory
+      loop: "{{ dotfiles }}"
+
+    - name: Ensure dotfiles are present
+      ansible.builtin.template:
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
+        mode: "{{ item.mode }}"
+      loop: "{{ dotfiles }}"
